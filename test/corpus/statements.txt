@@ -1,0 +1,500 @@
+================================================================================
+Embedded SELECT INTO with join and host variables
+================================================================================
+
+EXEC SQL SELECT E.NAME, D.DEPTNAME AS DNAME, COUNT(*)
+           INTO :EMP.NAME, :DNAME :DNAME-IND, :CNT
+           FROM PROD.EMP E
+           LEFT OUTER JOIN DEPT D ON E.DEPTNO = D.DEPTNO
+          WHERE E.SALARY BETWEEN :LOW AND :HIGH
+            AND E.HIRED > CURRENT DATE - 3 YEARS
+          GROUP BY E.NAME, D.DEPTNAME
+          WITH UR;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (exec_sql
+    (select_statement
+      (query
+        (subselect
+          (select_clause
+            (select_item
+              (object_name
+                (identifier)
+                (identifier)))
+            (select_item
+              (object_name
+                (identifier)
+                (identifier))
+              (identifier))
+            (select_item
+              (function_call
+                (object_name
+                  (identifier))
+                (arguments
+                  (operator)))))
+          (into_clause
+            (host_variable)
+            (host_variable
+              (indicator))
+            (host_variable))
+          (from_clause
+            (table_reference
+              (joined_table
+                (table_reference
+                  (object_name
+                    (identifier)
+                    (identifier))
+                  (correlation
+                    (identifier)))
+                (table_reference
+                  (object_name
+                    (identifier))
+                  (correlation
+                    (identifier)))
+                (comparison_expression
+                  (object_name
+                    (identifier)
+                    (identifier))
+                  (object_name
+                    (identifier)
+                    (identifier))))))
+          (where_clause
+            (binary_expression
+              (between_expression
+                (object_name
+                  (identifier)
+                  (identifier))
+                (host_variable)
+                (host_variable))
+              (comparison_expression
+                (object_name
+                  (identifier)
+                  (identifier))
+                (binary_expression
+                  (special_register
+                    (identifier))
+                  (labeled_duration
+                    (number))))))
+          (group_by_clause
+            (object_name
+              (identifier)
+              (identifier))
+            (object_name
+              (identifier)
+              (identifier))))
+        (isolation_clause
+          (identifier))))))
+
+================================================================================
+Cursor declaration and use
+================================================================================
+
+DECLARE C1 SCROLL CURSOR WITH HOLD FOR
+  SELECT * FROM T1 WHERE A IN (SELECT B FROM T2) FOR UPDATE OF C;
+OPEN C1;
+FETCH NEXT ROWSET FROM C1 FOR 10 ROWS INTO :A, :B;
+UPDATE T1 SET C = NULL WHERE CURRENT OF C1;
+CLOSE C1;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (declare_cursor_statement
+    (identifier)
+    (identifier)
+    (query
+      (subselect
+        (select_clause
+          (select_item))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier))))
+        (where_clause
+          (in_expression
+            (object_name
+              (identifier))
+            (subquery
+              (query
+                (subselect
+                  (select_clause
+                    (select_item
+                      (object_name
+                        (identifier))))
+                  (from_clause
+                    (table_reference
+                      (object_name
+                        (identifier))))))))))
+      (for_clause
+        (identifier)
+        (object_name
+          (identifier)))))
+  (open_statement
+    (identifier))
+  (fetch_statement
+    (identifier)
+    (identifier)
+    (identifier)
+    (rows_clause
+      (number))
+    (into_clause
+      (host_variable)
+      (host_variable)))
+  (update_statement
+    (object_name
+      (identifier))
+    (set_clause
+      (assignment
+        (object_name
+          (identifier))
+        (null)))
+    (current_of
+      (identifier)))
+  (close_statement
+    (identifier)))
+
+================================================================================
+Data change statements
+================================================================================
+
+INSERT INTO T1 (A, B) VALUES (1, 'it''s');
+INSERT INTO T2 SELECT * FROM T1 WHERE A > 0;
+DELETE FROM T1 X WHERE NOT EXISTS (SELECT 1 FROM T3 WHERE T3.A = X.A);
+MERGE INTO T1 AS T USING T2 AS S ON T.A = S.A
+  WHEN MATCHED THEN UPDATE SET B = S.B
+  WHEN NOT MATCHED THEN INSERT (A, B) VALUES (S.A, S.B);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (insert_statement
+    (object_name
+      (identifier))
+    (column_list
+      (identifier)
+      (identifier))
+    (query
+      (values_clause
+        (row_value
+          (number)
+          (string)))))
+  (insert_statement
+    (object_name
+      (identifier))
+    (query
+      (subselect
+        (select_clause
+          (select_item))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier))))
+        (where_clause
+          (comparison_expression
+            (object_name
+              (identifier))
+            (number))))))
+  (delete_statement
+    (object_name
+      (identifier))
+    (correlation
+      (identifier))
+    (where_clause
+      (not_expression
+        (exists_expression
+          (subquery
+            (query
+              (subselect
+                (select_clause
+                  (select_item
+                    (number)))
+                (from_clause
+                  (table_reference
+                    (object_name
+                      (identifier))))
+                (where_clause
+                  (comparison_expression
+                    (object_name
+                      (identifier)
+                      (identifier))
+                    (object_name
+                      (identifier)
+                      (identifier)))))))))))
+  (merge_statement
+    (object_name
+      (identifier))
+    (correlation
+      (identifier))
+    (table_reference
+      (object_name
+        (identifier))
+      (correlation
+        (identifier)))
+    (comparison_expression
+      (object_name
+        (identifier)
+        (identifier))
+      (object_name
+        (identifier)
+        (identifier)))
+    (merge_when
+      (set_clause
+        (assignment
+          (object_name
+            (identifier))
+          (object_name
+            (identifier)
+            (identifier)))))
+    (merge_when
+      (column_list
+        (identifier)
+        (identifier))
+      (values_clause
+        (row_value
+          (object_name
+            (identifier)
+            (identifier))
+          (object_name
+            (identifier)
+            (identifier)))))))
+
+================================================================================
+DCLGEN table declaration
+================================================================================
+
+EXEC SQL DECLARE PROD.EMP TABLE
+  ( EMPNO    CHAR(6)       NOT NULL,
+    NAME     VARCHAR(30)   NOT NULL,
+    SALARY   DECIMAL(9, 2)
+  ) ;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (exec_sql
+    (declare_table_statement
+      (object_name
+        (identifier)
+        (identifier))
+      (table_elements
+        (column_definition
+          (identifier)
+          (data_type
+            (object_name
+              (identifier))
+            (type_parameters
+              (number)))
+          (identifier)
+          (identifier))
+        (column_definition
+          (identifier)
+          (data_type
+            (object_name
+              (identifier))
+            (type_parameters
+              (number)))
+          (identifier)
+          (identifier))
+        (column_definition
+          (identifier)
+          (data_type
+            (object_name
+              (identifier))
+            (type_parameters
+              (number)
+              (number))))))))
+
+================================================================================
+DDL
+================================================================================
+
+CREATE TABLE PROD.EMP
+  ( EMPNO  CHAR(6) NOT NULL WITH DEFAULT,
+    DEPTNO CHAR(3) REFERENCES PROD.DEPT (DEPTNO) ON DELETE CASCADE,
+    PRIMARY KEY (EMPNO)
+  ) IN DB1.TS1 CCSID EBCDIC;
+CREATE UNIQUE INDEX PROD.EMPIX ON PROD.EMP (EMPNO ASC) CLUSTER;
+CREATE VIEW PROD.V1 (N) AS SELECT NAME FROM PROD.EMP;
+CREATE ALIAS EMP FOR PROD.EMP;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (create_table_statement
+    (object_name
+      (identifier)
+      (identifier))
+    (table_elements
+      (column_definition
+        (identifier)
+        (data_type
+          (object_name
+            (identifier))
+          (type_parameters
+            (number)))
+        (identifier)
+        (identifier)
+        (identifier)
+        (identifier))
+      (column_definition
+        (identifier)
+        (data_type
+          (object_name
+            (identifier))
+          (type_parameters
+            (number)))
+        (references_clause
+          (object_name
+            (identifier)
+            (identifier))
+          (group
+            (identifier)))
+        (identifier)
+        (identifier)
+        (identifier))
+      (table_constraint
+        (identifier)
+        (group
+          (identifier))))
+    (identifier)
+    (identifier)
+    (operator)
+    (identifier)
+    (identifier)
+    (identifier))
+  (create_index_statement
+    (object_name
+      (identifier)
+      (identifier))
+    (object_name
+      (identifier)
+      (identifier))
+    (group
+      (identifier)
+      (identifier))
+    (identifier))
+  (create_view_statement
+    (object_name
+      (identifier)
+      (identifier))
+    (column_list
+      (identifier))
+    (query
+      (subselect
+        (select_clause
+          (select_item
+            (object_name
+              (identifier))))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier)
+              (identifier)))))))
+  (create_alias_statement
+    (object_name
+      (identifier))
+    (object_name
+      (identifier)
+      (identifier))))
+
+================================================================================
+Generic statements
+================================================================================
+
+GRANT SELECT, UPDATE ON TABLE PROD.EMP TO USER1;
+SET CURRENT SQLID = 'PROD';
+CREATE PROCEDURE P1 (IN X INT)
+  LANGUAGE SQL
+  BEGIN
+    DECLARE Y INT DEFAULT 0;
+    IF X > 0 THEN SET Y = 1; END IF;
+  END;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (statement
+    (identifier)
+    (identifier)
+    (identifier)
+    (identifier)
+    (identifier)
+    (identifier)
+    (operator)
+    (identifier)
+    (identifier)
+    (identifier))
+  (statement
+    (identifier)
+    (identifier)
+    (identifier)
+    (operator)
+    (string))
+  (statement
+    (identifier)
+    (identifier)
+    (group
+      (identifier)
+      (identifier)
+      (identifier))
+    (identifier)
+    (identifier)
+    (compound_block
+      (identifier)
+      (identifier)
+      (identifier)
+      (identifier)
+      (number)
+      (identifier)
+      (identifier)
+      (operator)
+      (number)
+      (identifier)
+      (identifier)
+      (identifier)
+      (operator)
+      (number)
+      (identifier))))
+
+================================================================================
+CALL, INCLUDE and COBOL-style END-EXEC
+================================================================================
+
+EXEC SQL INCLUDE SQLCA END-EXEC.
+EXEC SQL CALL PROD.PROC1 (:A, 'X') END-EXEC.
+-- a comment
+/* a block
+   comment */
+CALL :PROCNAME
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (exec_sql
+    (include_statement
+      (identifier)))
+  (exec_sql
+    (call_statement
+      (object_name
+        (identifier)
+        (identifier))
+      (arguments
+        (host_variable)
+        (string))))
+  (comment)
+  (comment)
+  (call_statement
+    (host_variable)))
+
+================================================================================
+WHERE without a condition
+:error
+================================================================================
+
+SELECT A FROM T1 WHERE;
+
+--------------------------------------------------------------------------------
+
+
