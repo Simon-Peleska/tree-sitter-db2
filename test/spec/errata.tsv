@@ -1,0 +1,12 @@
+# Examples that are wrong in the manual itself. id<TAB>reason; tree-sitter must reject them.
+p0229-8e51e7bb	EXEC with VALUES but no SQL statement
+p0565-4f6ad769	stray comma before the closing parenthesis
+p0653-d6b5a038	unbalanced parentheses
+p0670-cd9ea52b	unbalanced parentheses
+p0890-7660718c	missing ';' after the CALL, so it runs into the next SELECT
+p1098-a16afbc7	unbalanced parentheses
+p1810-b2f39270	INTO after WHERE in SELECT INTO
+p2007-02bced76	FOR n ROWS before VALUES; the diagram puts it after
+p2057-4ebf8b0a	UNNEST without the required correlation name
+p2244-44673668	comma instead of AND in WHERE
+p2245-1001f5dc	comma instead of AND in WHERE

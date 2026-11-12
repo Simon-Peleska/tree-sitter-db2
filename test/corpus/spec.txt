@@ -1,0 +1,382 @@
+================================================================================
+Special registers with several words
+================================================================================
+
+VALUES CURRENT DEBUG MODE INTO :MODE;
+EXEC SQL VALUES (CURRENT APPLICATION ENCODING SCHEME) INTO :HV1;
+SELECT CURRENT LOCALE LC_CTYPE, CURRENT MAINTAINED TABLE TYPES FOR OPTIMIZATION,
+       CURRENT QUERY ACCELERATION WAITFORDATA, CURRENT TEMPORAL SYSTEM_TIME,
+       CURRENT TIME ZONE, CURRENT TIMESTAMP(12) WITH TIME ZONE, CURRENT SQLID
+  FROM SYSIBM.SYSDUMMY1;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (select_statement
+    (query
+      (values_clause
+        (special_register)
+        (into_clause
+          (host_variable)))))
+  (exec_sql
+    (select_statement
+      (query
+        (values_clause
+          (parenthesized_expression
+            (special_register))
+          (into_clause
+            (host_variable))))))
+  (select_statement
+    (query
+      (subselect
+        (select_clause
+          (select_item
+            (special_register))
+          (select_item
+            (special_register))
+          (select_item
+            (special_register))
+          (select_item
+            (special_register))
+          (select_item
+            (special_register))
+          (select_item
+            (special_register
+              (identifier)
+              (type_parameters
+                (number))))
+          (select_item
+            (special_register
+              (identifier))))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier)
+              (identifier))))))))
+
+================================================================================
+SESSION and CLIENT registers next to SESSION tables
+================================================================================
+
+SELECT SESSION TIME ZONE, CLIENT USERID, SESSION.T.C
+  FROM SESSION.T WITH UR;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (select_statement
+    (query
+      (subselect
+        (select_clause
+          (select_item
+            (special_register))
+          (select_item
+            (special_register))
+          (select_item
+            (object_name
+              (identifier)
+              (identifier)
+              (identifier))))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier)
+              (identifier)))))
+      (isolation_clause
+        (identifier)))))
+
+================================================================================
+Datetime constants next to datetime functions and columns
+================================================================================
+
+SELECT DATE '2024-01-31', DATE(TS), DATE, TIME '10.30.00'
+  FROM T FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-31-10.30.00';
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (select_statement
+    (query
+      (subselect
+        (select_clause
+          (select_item
+            (datetime_literal))
+          (select_item
+            (function_call
+              (object_name
+                (identifier))
+              (arguments
+                (identifier))))
+          (select_item
+            (object_name
+              (identifier)))
+          (select_item
+            (datetime_literal)))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier))
+            (period_specification
+              (identifier)
+              (datetime_literal))))))))
+
+================================================================================
+Include columns
+================================================================================
+
+SELECT * FROM FINAL TABLE (INSERT INTO T (A) INCLUDE (B INT) VALUES (1, 2));
+UPDATE T INCLUDE (Z INT) SET A = 1, Z = 2;
+DELETE FROM T X INCLUDE (Z INT) SET Z = 1 WHERE X.A = 1;
+MERGE INTO T X INCLUDE (Z INT) USING U S ON X.A = S.A
+  WHEN MATCHED THEN UPDATE SET B = 1 QUERYNO 7;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (select_statement
+    (query
+      (subselect
+        (select_clause
+          (select_item))
+        (from_clause
+          (table_reference
+            (insert_statement
+              (object_name
+                (identifier))
+              (column_list
+                (identifier))
+              (include_columns
+                (column_definition
+                  (identifier)
+                  (data_type
+                    (object_name
+                      (identifier)))))
+              (query
+                (values_clause
+                  (row_value
+                    (number)
+                    (number))))))))))
+  (update_statement
+    (object_name
+      (identifier))
+    (include_columns
+      (column_definition
+        (identifier)
+        (data_type
+          (object_name
+            (identifier)))))
+    (set_clause
+      (assignment
+        (object_name
+          (identifier))
+        (number))
+      (assignment
+        (object_name
+          (identifier))
+        (number))))
+  (delete_statement
+    (object_name
+      (identifier))
+    (correlation
+      (identifier))
+    (include_columns
+      (column_definition
+        (identifier)
+        (data_type
+          (object_name
+            (identifier)))))
+    (set_clause
+      (assignment
+        (object_name
+          (identifier))
+        (number)))
+    (where_clause
+      (comparison_expression
+        (object_name
+          (identifier)
+          (identifier))
+        (number))))
+  (merge_statement
+    (object_name
+      (identifier))
+    (correlation
+      (identifier))
+    (include_columns
+      (column_definition
+        (identifier)
+        (data_type
+          (object_name
+            (identifier)))))
+    (table_reference
+      (object_name
+        (identifier))
+      (correlation
+        (identifier)))
+    (comparison_expression
+      (object_name
+        (identifier)
+        (identifier))
+      (object_name
+        (identifier)
+        (identifier)))
+    (merge_when
+      (set_clause
+        (assignment
+          (object_name
+            (identifier))
+          (number))))
+    (queryno_clause
+      (number))))
+
+================================================================================
+Typed correlation and UNPACK
+================================================================================
+
+SELECT UNPACK(F(C1)).* AS (NAME VARCHAR(40) CCSID UNICODE, DOB DATE)
+  FROM TABLE (G(1)) AS X (A INT, B TIMESTAMP(6) WITH TIME ZONE);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (select_statement
+    (query
+      (subselect
+        (select_clause
+          (select_item
+            (function_call
+              (object_name
+                (identifier))
+              (arguments
+                (identifier)
+                (group
+                  (identifier))))
+            (column_definition
+              (identifier)
+              (data_type
+                (object_name
+                  (identifier))
+                (type_parameters
+                  (number)))
+              (identifier)
+              (identifier))
+            (column_definition
+              (identifier)
+              (data_type
+                (object_name
+                  (identifier))))))
+        (from_clause
+          (table_reference
+            (function_call
+              (object_name
+                (identifier))
+              (arguments
+                (number)))
+            (correlation
+              (identifier)
+              (column_definition
+                (identifier)
+                (data_type
+                  (object_name
+                    (identifier))))
+              (column_definition
+                (identifier)
+                (data_type
+                  (object_name
+                    (identifier))
+                  (type_parameters
+                    (number)))
+                (identifier)
+                (identifier)
+                (identifier)))))))))
+
+================================================================================
+Arrays and bracket trigraphs
+================================================================================
+
+SELECT ARRAY[1, 2], ARR[2], ARR??(3??) FROM T;
+SET V = ARRAY[1, 2];
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (select_statement
+    (query
+      (subselect
+        (select_clause
+          (select_item
+            (array_constructor
+              (number)
+              (number)))
+          (select_item
+            (array_element
+              (object_name
+                (identifier))
+              (number)))
+          (select_item
+            (array_element
+              (object_name
+                (identifier))
+              (number))))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier)))))))
+  (statement
+    (identifier)
+    (identifier)
+    (operator)
+    (identifier)
+    (group
+      (number)
+      (number))))
+
+================================================================================
+Cursor over a host variable and CALL with a descriptor
+================================================================================
+
+DECLARE CS1 CURSOR WITH ROWSET POSITIONING FOR :INSSTMT;
+CALL P1 USING DESCRIPTOR :SQLDA;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (declare_cursor_statement
+    (identifier)
+    (identifier)
+    (identifier)
+    (host_variable))
+  (call_statement
+    (object_name
+      (identifier))
+    (host_variable)))
+
+================================================================================
+DBCS identifiers and DBCS and NEL whitespace
+================================================================================
+
+SELECT 名前 FROM 表 WHERE A = 1　ANDB = 2;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (select_statement
+    (query
+      (subselect
+        (select_clause
+          (select_item
+            (object_name
+              (identifier))))
+        (from_clause
+          (table_reference
+            (object_name
+              (identifier))))
+        (where_clause
+          (binary_expression
+            (comparison_expression
+              (object_name
+                (identifier))
+              (number))
+            (comparison_expression
+              (object_name
+                (identifier))
+              (number))))))))

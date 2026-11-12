@@ -18,3 +18,14 @@
 - mapa's test data contains only valid SQL, so the comparison tests what this
   grammar accepts, not what it rejects. The corpus has the error tests.
 - `test/mapa/run.sh` takes about 40 s.
+- Some multi-word constructs are single tokens: `DATE`, `TIME` or
+  `TIMESTAMP` followed by a string (`datetime_literal`), the special registers
+  of several words (`CURRENT DEBUG MODE`, `SESSION TIME ZONE`, `CLIENT
+  USERID`, ...) and `WITH TIME ZONE`. That keeps `DATE(x)`, `SESSION.T` and
+  columns named `CLIENT` working and the parser fast, but a comment between
+  those words breaks them.
+- Statement ids in `test/spec/baseline.tsv` are the page plus a hash of the
+  statement. When IBM updates the manual, changed or moved examples show up as
+  verdict changes; look at them and rerun with `--update`. An errata id that no
+  longer matches any statement prints `[SX001]`; fix its id in
+  `test/spec/errata.tsv`.

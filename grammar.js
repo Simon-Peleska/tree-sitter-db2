@@ -12,6 +12,9 @@ const kw = (word) => alias(new RegExp(word.toLowerCase(), 'i'), word);
 const kws = (...words) => seq(...words.map(kw));
 const sep1 = (rule, separator) => seq(rule, repeat(seq(separator, rule)));
 const commaSep1 = (rule) => sep1(rule, ',');
+const space = '[\\s\\u0085\\u3000]';
+const ws = space + '+';
+const stringBody = "'([^']|'')*'";
 
 const PREC = {
   set_union: 1,
@@ -31,7 +34,7 @@ module.exports = grammar({
 
   word: $ => $.identifier,
 
-  extras: $ => [/\s/, $.comment],
+  extras: $ => [new RegExp(space), $.comment],
 
   conflicts: $ => [
     [$.table_reference, $._fullselect],
@@ -135,6 +138,7 @@ module.exports = grammar({
     select_item: $ => choice(
       '*',
       seq($.object_name, '.*'),
+      seq($.function_call, '.*', kw('AS'), '(', commaSep1($.column_definition), ')'),
       seq(field('value', $._expression), optional(seq(optional(kw('AS')), field('alias', $._name)))),
     ),
 
@@ -172,7 +176,7 @@ module.exports = grammar({
     correlation: $ => seq(
       optional(kw('AS')),
       field('name', $._name),
-      optional(seq('(', commaSep1(seq($._name, optional($.data_type))), ')')),
+      optional(seq('(', commaSep1(choice($._name, $.column_definition)), ')')),
     ),
 
     period_specification: $ => seq(
@@ -221,6 +225,7 @@ module.exports = grammar({
       kws('INSERT', 'INTO'),
       field('table', $.object_name),
       optional($.column_list),
+      optional($.include_columns),
       optional(seq(kw('OVERRIDING'), $.identifier, kw('VALUE'))),
       $.query,
       optional($.rows_clause),
@@ -228,15 +233,17 @@ module.exports = grammar({
     ),
     // [NOT] ATOMIC [CONTINUE ON SQLEXCEPTION]
     // One token for NOT ATOMIC: a lone NOT after an expression would start NOT LIKE/IN/BETWEEN.
-    atomic_clause: $ => prec.right(seq(choice(kw('ATOMIC'), alias(/not[ \t\r\n]+atomic/i, 'NOT ATOMIC')), repeat($.identifier))),
+    atomic_clause: $ => prec.right(seq(choice(kw('ATOMIC'), alias(new RegExp('not' + ws + 'atomic', 'i'), 'NOT ATOMIC')), repeat($.identifier))),
     // FOR n ROWS: multi-row INSERT and MERGE, rowset FETCH.
     rows_clause: $ => seq(kw('FOR'), $._expression, choice(kw('ROW'), kw('ROWS'))),
+    include_columns: $ => seq(kw('INCLUDE'), '(', commaSep1($.column_definition), ')'),
 
     update_statement: $ => seq(
       kw('UPDATE'),
       field('table', $.object_name),
       optional($.period_specification),
       optional($.correlation),
+      optional($.include_columns),
       $.set_clause,
       optional(choice($.where_clause, $.current_of)),
       repeat(choice($.isolation_clause, $.queryno_clause, $.skip_locked_clause, $.fetch_clause)),
@@ -259,6 +266,7 @@ module.exports = grammar({
       field('table', $.object_name),
       optional($.period_specification),
       optional($.correlation),
+      optional(seq($.include_columns, optional($.set_clause))),
       optional(choice($.where_clause, $.current_of)),
       repeat(choice($.isolation_clause, $.queryno_clause, $.skip_locked_clause, $.fetch_clause)),
     ),
@@ -267,6 +275,7 @@ module.exports = grammar({
       kws('MERGE', 'INTO'),
       field('table', $.object_name),
       optional($.correlation),
+      optional($.include_columns),
       kw('USING'),
       field('source', $.table_reference),
       kw('ON'),
@@ -274,6 +283,7 @@ module.exports = grammar({
       repeat1($.merge_when),
       optional(kws('ELSE', 'IGNORE')),
       optional($.atomic_clause),
+      optional($.queryno_clause),
     ),
     merge_when: $ => prec.right(seq(
       kw('WHEN'),
@@ -298,7 +308,7 @@ module.exports = grammar({
       kw('CURSOR'),
       repeat(choice(kw('WITH'), kw('WITHOUT'), $.identifier)),
       kw('FOR'),
-      choice($.query, field('statement', $.identifier)),
+      choice($.query, field('statement', choice($.identifier, $.host_variable))),
     ),
 
     open_statement: $ => seq(kw('OPEN'), field('cursor', $.identifier), repeat($._soup_token)),
@@ -392,7 +402,7 @@ module.exports = grammar({
     call_statement: $ => seq(
       kw('CALL'),
       field('procedure', choice($.object_name, $.host_variable)),
-      optional($.arguments),
+      optional(choice($.arguments, seq(kws('USING', 'DESCRIPTOR'), $._target))),
     ),
 
     include_statement: $ => seq(kw('INCLUDE'), field('member', $.identifier)),
@@ -422,6 +432,8 @@ module.exports = grammar({
       $.object_name,
       $.function_call,
       $.special_register,
+      $.datetime_literal,
+      $.array_constructor,
       $.case_expression,
       $.exists_expression,
       $.sequence_reference,
@@ -449,12 +461,40 @@ module.exports = grammar({
     // XMLELEMENT(NAME "x", ...) and window specifications all fit without a rule each.
     arguments: $ => seq('(', repeat($._soup_token), ')'),
 
-    special_register: $ => prec.right(seq(
-      kw('CURRENT'),
-      $.identifier,
-      optional($.type_parameters),
-      optional(seq(choice(kw('WITH'), kw('WITHOUT')), kws('TIME', 'ZONE'))),
+    special_register: $ => prec.right(choice(
+      seq(kw('CURRENT'), $.identifier, optional($.type_parameters), optional(alias($._with_time_zone, 'WITH TIME ZONE'))),
+      // Registers of several words are one token each: as keywords, they cost a tenth of the
+      // parse speed. One token also keeps SESSION and CLIENT usable as plain names.
+      alias(new RegExp('current' + ws + '(' + [
+        'application' + ws + '(compatibility|encoding' + ws + 'scheme)',
+        'debug' + ws + 'mode',
+        'decfloat' + ws + 'rounding' + ws + 'mode',
+        'explain' + ws + 'mode',
+        'locale' + ws + 'lc_ctype',
+        'lock' + ws + 'timeout',
+        'maintained' + ws + '(table' + ws + ')?types(' + ws + 'for' + ws + 'optimization)?',
+        'optimization' + ws + 'hint',
+        'package' + ws + 'path',
+        'query' + ws + 'acceleration(' + ws + 'waitfordata)?',
+        'refresh' + ws + 'age',
+        'routine' + ws + 'version',
+        'temporal' + ws + '(business_time|system_time)',
+        'time' + ws + 'zone',
+      ].join('|') + ')', 'i'), 'CURRENT'),
+      alias(new RegExp('session' + ws + 'time' + space + '*zone', 'i'), 'SESSION TIME ZONE'),
+      alias(new RegExp('client' + ws + '(acctng|applname|userid|wrkstnname)', 'i'), 'CLIENT'),
     )),
+    // One token: WITH alone continues with DEFAULT, UR, CHECK OPTION and more.
+    _with_time_zone: _ => new RegExp('(with|without)' + ws + 'time' + ws + 'zone', 'i'),
+
+    // DATE '2024-01-31', TIME '10.30.00', TIMESTAMP '...'. One token, so DATE(x) stays a function call.
+    datetime_literal: _ => new RegExp('(date|time|timestamp)' + space + '*' + stringBody, 'i'),
+
+    array_constructor: $ => seq(
+      alias(new RegExp('array' + space + '*(\\[|\\?\\?\\()', 'i'), 'ARRAY['),
+      optional(choice(commaSep1($._expression), $.query)),
+      $._right_bracket,
+    ),
 
     sequence_reference: $ => seq(
       choice(seq(choice(kw('NEXT'), kw('PREVIOUS')), kw('VALUE')), kw('NEXTVAL'), kw('PREVVAL')),
@@ -462,7 +502,10 @@ module.exports = grammar({
       field('sequence', $.object_name),
     ),
 
-    array_element: $ => seq($.object_name, '[', $._expression, ']'),
+    array_element: $ => seq($.object_name, $._left_bracket, $._expression, $._right_bracket),
+    // ??( and ??) are trigraphs for brackets in CCSIDs without them.
+    _left_bracket: _ => choice('[', '??('),
+    _right_bracket: _ => choice(']', '??)'),
 
     row_change_expression: $ => seq(kws('ROW', 'CHANGE'), $.identifier, kw('FOR'), $.object_name),
 
@@ -542,10 +585,11 @@ module.exports = grammar({
       $.parameter_marker,
       $.subquery,
       alias($._soup_group, $.group),
-      alias(seq('[', repeat($._soup_token), ']'), $.group),
+      alias($._bracket_group, $.group),
       alias(/[=<>¬!^|+\-*\/.:&%]+|=>/, $.operator),
     ),
     _soup_group: $ => seq('(', repeat($._soup_token), ')'),
+    _bracket_group: $ => seq($._left_bracket, repeat($._soup_token), $._right_bracket),
     _statement_token: $ => choice($._soup_token, $.compound_block),
 
     // SQL PL bodies (CREATE PROCEDURE ... BEGIN ...; ...; END) contain ';'.
@@ -557,9 +601,9 @@ module.exports = grammar({
     compound_case: $ => seq(
       kw('CASE'),
       repeat(choice($._statement_token, ';', alias($._end_compound, $.identifier), $.compound_case)),
-      choice(kw('END'), alias(/end[ \t\r\n]+case/i, 'END CASE')),
+      choice(kw('END'), alias(new RegExp('end' + ws + 'case', 'i'), 'END CASE')),
     ),
-    _end_compound: _ => /end[ \t\r\n]+(if|loop|while|repeat|for)/i,
+    _end_compound: _ => new RegExp('end' + ws + '(if|loop|while|repeat|for)', 'i'),
 
     // ---- names and literals --------------------------------------------------
 
@@ -567,7 +611,7 @@ module.exports = grammar({
     column_list: $ => seq('(', commaSep1($._name), ')'),
     _name: $ => choice($.identifier, $.quoted_identifier),
 
-    identifier: _ => /[A-Za-z@#$_À-ɏ][A-Za-z0-9@#$_À-ɏ]*/,
+    identifier: _ => /[\p{L}@#$_][\p{L}\p{N}@#$_]*/,
     quoted_identifier: _ => /"([^"]|"")*"/,
 
     host_variable: $ => prec.right(seq(
@@ -577,7 +621,7 @@ module.exports = grammar({
     _host_variable_name: _ => /:[A-Za-z@#$_][A-Za-z0-9@#$_\-]*(\.[A-Za-z@#$_][A-Za-z0-9@#$_\-]*)*/,
 
     number: _ => /(\d+(\.\d*)?|\.\d+)([Ee][+-]?\d+)?/,
-    string: _ => /([GgNnXx]|[Uu][Xx]|[Bb][Xx]|[Gg][Xx])?'([^']|'')*'/,
+    string: _ => new RegExp('([GgNnXx]|[Uu][Xx]|[Bb][Xx]|[Gg][Xx])?' + stringBody),
 
     comment: _ => token(choice(/--[^\r\n]*/, /\/\*[^*]*\*+([^/*][^*]*\*+)*\//)),
   },

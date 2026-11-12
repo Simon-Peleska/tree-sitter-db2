@@ -13,10 +13,13 @@ so editors and code-graph tools can read real-world SQL without choking on it.
   `FOR UPDATE/READ ONLY`, isolation, `OPTIMIZE FOR`, `QUERYNO`, `SKIP LOCKED
   DATA`; joins, nested table expressions, `LATERAL`, `TABLE(...)`, `FINAL
   TABLE (INSERT ...)`, period specifications, `CASE`, `EXISTS`, `IN`,
-  `BETWEEN`, `LIKE`, labeled durations, special registers, sequence
-  references.
-- `INSERT`, `UPDATE`, `DELETE` (including `WHERE CURRENT OF` and multi-row
-  `FOR n ROWS`), `MERGE`.
+  `BETWEEN`, `LIKE`, labeled durations, special registers (also the
+  multi-word ones like `CURRENT DECFLOAT ROUNDING MODE`), datetime constants
+  (`DATE '2024-01-31'`), sequence references, array constructors and
+  elements (also with the `??(` `??)` trigraphs), typed correlations and
+  `UNPACK(...).* AS (...)`.
+- `INSERT`, `UPDATE`, `DELETE` (including `WHERE CURRENT OF`, multi-row
+  `FOR n ROWS` and `INCLUDE` columns), `MERGE`.
 - `DECLARE CURSOR`, `DECLARE TABLE` (DCLGEN), `OPEN`, `CLOSE`, `FETCH`,
   `CALL`, `INCLUDE`.
 - `CREATE TABLE`, `CREATE VIEW`, `CREATE INDEX`, `CREATE ALIAS`, with column
@@ -69,5 +72,36 @@ this grammar can only disagree by rejecting; it rejects 19:
 - 2 statements using `]]` and `!!` as the concatenation operator (code-page
   variants of `||`).
 - 1 statement with a quoted string after a qualifier (`A.'XYZ'`).
+
+## Comparison with the SQL Reference
+
+`test/spec/run.sh` downloads IBM's [Db2 12 for z/OS SQL
+Reference](https://www.ibm.com/docs/en/SSEPEK_12.0.0/pdf/db2z_12_sqlrefbook.pdf)
+into `test/spec/.work`, extracts the example statements from all of its pages
+(1,914) and checks them against `test/spec/baseline.tsv` the same way. It also
+checks that the examples of every statement with its own rule parse as that
+rule and not as a generic `statement`. It takes about 1 s once the PDF is
+downloaded and converted.
+
+```sh
+nix develop -c test/spec/run.sh
+```
+
+The manual sets every example in a monospace font, so the extractor reads the
+PDF with `pdftohtml -xml` and keeps only the text in that font. Prose,
+headings, margin notes and neighbouring table cells drop out. The PDF's
+typographic quotes (`‘D11’`) become `'`. Every example parses except 11 that
+are wrong in the manual itself. `test/spec/errata.tsv` lists them with the
+reason, and the run fails if tree-sitter accepts one:
+
+- 4 with unbalanced parentheses or a stray comma (p. 565, 653, 670, 1098).
+- A `CALL` without its `;`, which runs into the next statement (p. 890).
+- 6 that contradict the manual's own syntax diagrams: `EXEC VALUES` without
+  `SQL` (p. 229), `INTO` after `WHERE` (p. 1810), `FOR 5 ROWS` before
+  `VALUES` (p. 2007), `UNNEST(...) AS (...)` without a correlation name
+  (p. 2057), and `WHERE A='x', B='y'` (p. 2244, 2245).
+
+An example with an unbalanced quote (p. 337) isn't extracted at all, because
+the stray quote swallows the rest of its code block.
 
 Known gaps are in `GOTCHAS.md`.
